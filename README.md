@@ -29,6 +29,19 @@ The transport in `src/signature.ts` and `src/client.ts` is also what `verify` an
 recompute a signature independently of Shopee, which is how a wrong sandbox host was caught. A
 dependency that hides signing would remove that check.
 
+## Endpoints covered
+
+`src/shop.ts`, `src/orders.ts` and `src/products.ts` wrap the calls a digital fulfilment pipeline
+needs, so a consumer does not hand-write request plumbing:
+
+| Module | Calls |
+|---|---|
+| `shop.ts` | `shop/get_shop_info`, `order/get_order_list` (paged by `update_time`) |
+| `orders.ts` | `order/get_order_detail` (batched, 50 per call, with the buyer and item fields) |
+| `products.ts` | `product/get_item_list`, `product/get_item_base_info`, `product/get_model_list` |
+
+Every list helper caps its own page walk, so a wrong `has_next_page` upstream cannot spin forever.
+
 ## Why TypeScript
 
 Shopee responses are loosely typed JSON that changes between regions and app versions. This
