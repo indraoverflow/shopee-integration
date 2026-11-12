@@ -39,9 +39,10 @@ describe("token exchange", () => {
   it("posts code, shop_id and partner_id to the token path", async () => {
     const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
     const fake = {
-      publicPost: async (path: string, body: Record<string, unknown>) => {
+      publicPostFlat: async (path: string, body: Record<string, unknown>) => {
         calls.push({ path, body });
-        return { access_token: "a", refresh_token: "r", expire_in: 14400 };
+        // The real endpoint answers flat, with an empty error and no response wrapper.
+        return { access_token: "a", refresh_token: "r", expire_in: 14400, error: "", message: "" };
       },
     } as unknown as ShopeeClient;
 
@@ -53,7 +54,7 @@ describe("token exchange", () => {
   it("refreshes through the public access_token path with the single-use refresh token", async () => {
     const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
     const fake = {
-      publicPost: async (path: string, body: Record<string, unknown>) => {
+      publicPostFlat: async (path: string, body: Record<string, unknown>) => {
         calls.push({ path, body });
         return { access_token: "a2", refresh_token: "r2", expire_in: 14400 };
       },
@@ -61,6 +62,7 @@ describe("token exchange", () => {
 
     const token = await refreshAccessToken(fake, 2001887, { refreshToken: "r1", shopId: 11 });
     expect(token.refresh_token).toBe("r2");
+    expect(calls[0]!.path).toBe("/api/v2/auth/access_token/get");
     expect(calls[0]).toEqual({ path: "/api/v2/auth/access_token/get", body: { refresh_token: "r1", shop_id: 11, partner_id: 2001887 } });
   });
 });

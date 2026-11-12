@@ -63,6 +63,15 @@ export class ShopeeClient {
     return this.call<T>({ kind: "public", method: "POST", path, body });
   }
 
+  /**
+   * The token endpoints answer flat: access_token, refresh_token and expire_in
+   * sit at the top level with an empty error, not inside `response`. Everything
+   * else is wrapped. This returns the body as-is so the caller can accept both.
+   */
+  async publicPostFlat<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    return this.call<T>({ kind: "public", method: "POST", path, body, unwrap: false });
+  }
+
   /** Shop API: signature also covers the access token and the shop id. */
   async shopGet<T>(path: string, shop: { accessToken: string; shopId: number }, query: Query = {}): Promise<T> {
     return this.call<T>({ kind: "shop", method: "GET", path, query, ...shop });
@@ -84,6 +93,8 @@ export class ShopeeClient {
     body?: Record<string, unknown>;
     accessToken?: string;
     shopId?: number;
+    /** false returns the whole envelope, for endpoints that answer flat. */
+    unwrap?: boolean;
   }): Promise<T> {
     const timestamp = unixSeconds(this.now());
     const { partnerId, partnerKey } = this.options;
@@ -133,6 +144,9 @@ export class ShopeeClient {
     }
     if (!response.ok) {
       throw new ShopeeApiError("http_error", `HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
+    if (input.unwrap === false) {
+      return envelope as unknown as T;
     }
     if (envelope.response === undefined) {
       throw new ShopeeApiError("invalid_response", "response field is missing");

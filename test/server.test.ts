@@ -50,7 +50,7 @@ describe("GET /auth/callback", () => {
     // A gateway status here would be replaced by the proxy's own error page,
     // which is exactly how the real message got lost behind the tunnel.
     const fake = {
-      publicPost: async () => {
+      publicPostFlat: async () => {
         throw new ShopeeApiError("invalid_code", "The code is expired or used or invalid");
       },
     } as unknown as ShopeeClient;
@@ -63,7 +63,7 @@ describe("GET /auth/callback", () => {
 
   it("stores the token and does not echo it", async () => {
     const fake = {
-      publicPost: async () => ({ access_token: "secret-access", refresh_token: "secret-refresh", expire_in: 14400 }),
+      publicPostFlat: async () => ({ access_token: "secret-access", refresh_token: "secret-refresh", expire_in: 14400 }),
     } as unknown as ShopeeClient;
     const { app, tokens } = server({}, fake);
 

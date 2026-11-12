@@ -48,6 +48,17 @@ export interface AccessToken {
 }
 
 /** Exchanges the authorization code for the first access token. */
+type TokenBody = AccessToken & { response?: AccessToken };
+
+/** The token endpoints answer flat, but accept the wrapped shape as well. */
+function readToken(body: TokenBody): AccessToken {
+  const token = body.response ?? body;
+  if (!token.access_token) {
+    throw new Error("token response has no access_token");
+  }
+  return token;
+}
+
 export async function exchangeCode(
   client: ShopeeClient,
   partnerId: number,
@@ -59,7 +70,7 @@ export async function exchangeCode(
     partner_id: partnerId,
   };
   if (input.mainAccountId !== undefined) body.main_account_id = input.mainAccountId;
-  return client.publicPost<AccessToken>(TOKEN_PATH, body);
+  return readToken(await client.publicPostFlat<TokenBody>(TOKEN_PATH, body));
 }
 
 /** Rotates the access token. Refresh tokens are single use, so store the new one. */
@@ -68,9 +79,11 @@ export async function refreshAccessToken(
   partnerId: number,
   input: { refreshToken: string; shopId: number },
 ): Promise<AccessToken> {
-  return client.publicPost<AccessToken>(REFRESH_PATH, {
-    refresh_token: input.refreshToken,
-    shop_id: input.shopId,
-    partner_id: partnerId,
-  });
+  return readToken(
+    await client.publicPostFlat<TokenBody>(REFRESH_PATH, {
+      refresh_token: input.refreshToken,
+      shop_id: input.shopId,
+      partner_id: partnerId,
+    }),
+  );
 }

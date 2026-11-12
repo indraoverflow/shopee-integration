@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    await client.publicPost(TOKEN_PATH, {
+    await client.publicPostFlat(TOKEN_PATH, {
       code: PROBE_CODE,
       shop_id: 0,
       partner_id: config.partnerId,
