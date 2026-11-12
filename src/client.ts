@@ -148,9 +148,11 @@ export class ShopeeClient {
     if (input.unwrap === false) {
       return envelope as unknown as T;
     }
-    if (envelope.response === undefined) {
-      throw new ShopeeApiError("invalid_response", "response field is missing");
-    }
-    return envelope.response;
+    // Not every v2 endpoint wraps its payload: the token exchange and
+    // get_shop_info answer flat, with the fields at the top level and an empty
+    // error. Unwrap when the field is there, otherwise take the body as is. A
+    // strict "response is missing" error rejects a perfectly good answer and,
+    // for the token exchange, throws away a single-use token.
+    return (envelope.response ?? envelope) as T;
   }
 }

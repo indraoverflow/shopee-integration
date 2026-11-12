@@ -66,6 +66,14 @@ describe("ShopeeClient", () => {
     expect(token.access_token).toBe("a");
   });
 
+  it("accepts a flat body, as token and get_shop_info answer", async () => {
+    const { fetchImpl } = recordingFetch({ shop_name: "Sandbox Shop", region: "ID", status: "NORMAL", error: "", message: "" });
+    const client = new ShopeeClient({ partnerId: 7, partnerKey: "key", baseUrl: "https://sandbox.test", fetchImpl, now: () => NOW });
+
+    const info = await client.shopGet<{ shop_name: string }>("/api/v2/shop/get_shop_info", { accessToken: "tok", shopId: 11 });
+    expect(info.shop_name).toBe("Sandbox Shop");
+  });
+
   it("throws ShopeeApiError when the envelope carries an error", async () => {
     const { fetchImpl } = recordingFetch({ error: "error_auth", message: "Invalid access_token.", request_id: "req-1" });
     const client = new ShopeeClient({ partnerId: 7, partnerKey: "key", baseUrl: "https://sandbox.test", fetchImpl, now: () => NOW });
