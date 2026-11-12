@@ -130,6 +130,7 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
         url: config.publicUrl,
         rawBody,
         signature,
+        alternateKeys: config.pushTestPartnerKey ? [config.pushTestPartnerKey] : [],
       });
       if (!valid) {
         return reply.code(401).send({ error: "invalid push signature" });

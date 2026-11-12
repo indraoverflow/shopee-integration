@@ -23,6 +23,8 @@ const envSchema = z.object({
   TOKEN_STORE_PATH: z.string().min(1).optional(),
   /** Full override for the API host, for regions whose host differs. */
   SHOPEE_BASE_URL: z.string().url().optional(),
+  /** Key the console uses to sign test pushes from the Push Mechanism page. */
+  PUSH_TEST_PARTNER_KEY: z.string().min(1).optional(),
 });
 
 export interface Config {
@@ -34,6 +36,7 @@ export interface Config {
   publicUrl?: string;
   port: number;
   tokenStorePath?: string;
+  pushTestPartnerKey?: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -48,5 +51,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (parsed.REDIRECT_URL) config.redirectUrl = parsed.REDIRECT_URL;
   if (parsed.PUBLIC_URL) config.publicUrl = parsed.PUBLIC_URL;
   if (parsed.TOKEN_STORE_PATH) config.tokenStorePath = parsed.TOKEN_STORE_PATH;
+  if (parsed.PUSH_TEST_PARTNER_KEY) config.pushTestPartnerKey = parsed.PUSH_TEST_PARTNER_KEY;
   return config;
 }

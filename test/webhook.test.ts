@@ -31,6 +31,19 @@ describe("verifyPushSignature", () => {
     expect(verifyPushSignature({ partnerKey: KEY, url: URL_, rawBody: BODY.replace("241112ABC", "241112ABD"), signature })).toBe(false);
     expect(verifyPushSignature({ partnerKey: KEY, url: URL_, rawBody: BODY, signature: "" })).toBe(false);
   });
+
+  it("accepts a signature made with an alternate key, for console test pushes", () => {
+    const testKey = "console-test-push-key";
+    const signature = pushSignature(testKey, URL_, BODY);
+
+    expect(verifyPushSignature({ partnerKey: KEY, url: URL_, rawBody: BODY, signature })).toBe(false);
+    expect(
+      verifyPushSignature({ partnerKey: KEY, url: URL_, rawBody: BODY, signature, alternateKeys: [testKey] }),
+    ).toBe(true);
+    expect(
+      verifyPushSignature({ partnerKey: KEY, url: URL_, rawBody: BODY, signature, alternateKeys: [""] }),
+    ).toBe(false);
+  });
 });
 
 describe("parsePushEvent", () => {

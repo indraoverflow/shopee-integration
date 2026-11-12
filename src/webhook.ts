@@ -19,17 +19,27 @@ export interface VerifyPushInput {
   rawBody: string;
   /** Value of the Authorization header. */
   signature: string;
+  /**
+   * Keys that are also accepted, checked after the primary one. Shopee signs
+   * test pushes from the console with a separate "Test Push Partner Key", so a
+   * deployment that wants the console's Verify button to pass needs both.
+   */
+  alternateKeys?: string[];
 }
 
-export function verifyPushSignature(input: VerifyPushInput): boolean {
-  const expected = pushSignature(input.partnerKey, input.url, input.rawBody);
-  const received = input.signature.trim().toLowerCase();
+function matches(expected: string, received: string): boolean {
   if (received.length !== expected.length) return false;
   try {
     return timingSafeEqual(Buffer.from(expected, "utf8"), Buffer.from(received, "utf8"));
   } catch {
     return false;
   }
+}
+
+export function verifyPushSignature(input: VerifyPushInput): boolean {
+  const received = input.signature.trim().toLowerCase();
+  const keys = [input.partnerKey, ...(input.alternateKeys ?? []).filter(Boolean)];
+  return keys.some((key) => matches(pushSignature(key, input.url, input.rawBody), received));
 }
 
 export interface PushEvent {
