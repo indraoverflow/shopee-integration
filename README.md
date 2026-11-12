@@ -1,4 +1,4 @@
-# shopee-sdk
+# shopee-integration
 
 A typed Node.js client, OAuth flow and Push receiver for the **Shopee Open Platform API v2**:
 correct signing for the three API kinds, an authorization helper, token exchange and refresh,
@@ -6,6 +6,28 @@ and a webhook endpoint that verifies the Push signature before it parses anythin
 
 The signing code is pinned by Shopee's own worked example from their documentation, so a change
 that breaks the base string fails the test suite instead of failing silently in production.
+
+## Scope, and what this does not replace
+
+This repository is a deployable service, not an SDK. It exists for four things an SDK does not do:
+verify a Push callback against the raw body, keep tokens across restarts, reconcile orders by
+`update_time`, and prove those credentials work from the command line (`npm run verify`,
+`npm run diagnose`).
+
+For endpoint breadth, `@congminh1254/shopee-sdk` (MIT, 464 generated endpoint schemas, live sandbox
+suites, `TEST_GLOBAL` pointed at the right host) is the better tool, and you should reach for it
+before hand-writing another endpoint here. Two findings from evaluating it against this codebase:
+
+- Its response types declare `response: T` as always present. This sandbox answers flat for
+  `auth/token/get` and `shop/get_shop_info`, with the payload at the top level, so any consumer
+  needs a `body.response ?? body` normaliser. This repository's transport takes that shape as
+  normal, which is why it stays.
+- It ships no webhook receiver, no reconciliation, and no token file store, which is the part worth
+  keeping here.
+
+The transport in `src/signature.ts` and `src/client.ts` is also what `verify` and `diagnose` use to
+recompute a signature independently of Shopee, which is how a wrong sandbox host was caught. A
+dependency that hides signing would remove that check.
 
 ## Why TypeScript
 
@@ -192,7 +214,7 @@ A webhook alone is not a feed. Pushes arrive late, twice, or not at all, so the 
 other half:
 
 ```ts
-import { reconcileOrders } from "shopee-sdk";
+import { reconcileOrders } from "shopee-integration";
 
 const seen = new Set<string>();
 const result = await reconcileOrders(client, { ...auth, from, to: Math.floor(Date.now() / 1000) }, async (order) => {
