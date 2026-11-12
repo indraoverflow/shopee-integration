@@ -97,6 +97,33 @@ accepted, without a shop and without a real code:
 | `invalid_partner_id` | The server looked the partner up and did not find it. The id does not exist in this environment, so the signature was never checked. |
 | anything else, for example an invalid or expired code | The signature was accepted. The credentials belong to this environment. |
 
+### When the answer is `error_sign`
+
+Four things can produce it, and guessing is slow. `npm run diagnose` narrows it down:
+
+```bash
+npm run diagnose
+```
+
+It compares the host clock with the server's `Date` header (a skew over five minutes invalidates
+every signature), then signs two different endpoints: the token exchange and the authorization
+page. Both failing means the key does not belong to that partner id, because the partner lookup
+succeeded and only the signature was refused.
+
+To test several keys at once, list them in a file and pass it in. Only the index, the first three
+characters and the length are printed, never the value:
+
+```bash
+cat > candidate-keys.txt <<'EOF'
+first-candidate-key
+second-candidate-key
+EOF
+CANDIDATE_KEYS_FILE=./candidate-keys.txt npm run diagnose
+rm candidate-keys.txt
+```
+
+`candidate-keys.txt` is covered by `.gitignore` together with `.env` and `data/`.
+
 ## Push (webhook)
 
 Shopee sends the signature in the `Authorization` header: HMAC-SHA256 of

@@ -19,7 +19,8 @@
     "test:watch": "vitest",
     "start": "node --env-file-if-exists=.env dist/server.js",
     "auth-url": "node --env-file-if-exists=.env dist/cli.js",
-    "verify": "node --env-file-if-exists=.env dist/verify.js"
+    "verify": "node --env-file-if-exists=.env dist/verify.js",
+    "diagnose": "node --env-file-if-exists=.env dist/diagnose.js"
   },
   "dependencies": {
     "fastify": "^5.2.0",

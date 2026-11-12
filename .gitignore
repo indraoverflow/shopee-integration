@@ -9,5 +9,8 @@ dist/
 # Token store: access and refresh tokens for every authorized shop.
 data/
 
+# Local key candidates for `npm run diagnose`.
+candidate-keys.txt
+
 coverage/
 *.log
