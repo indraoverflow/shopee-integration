@@ -76,6 +76,42 @@ describe("GET /auth/callback", () => {
   });
 });
 
+describe("GET /shop/info guard", () => {
+  const fake = () =>
+    ({ shopGet: async () => ({ shop_id: 11, shop_name: "Sandbox Shop", region: "ID", status: "NORMAL" }) }) as unknown as ShopeeClient;
+
+  it("refuses a request without the shared secret once one is configured", async () => {
+    const { app, tokens } = server({ shopInfoToken: "0123456789abcdef" }, fake());
+    await tokens.set({ shopId: 11, accessToken: "a", refreshToken: "r", expiresAt: Date.now() + 3_600_000 });
+
+    const anonymous = await app.inject({ method: "GET", url: "/shop/info?shop_id=11" });
+    expect(anonymous.statusCode).toBe(401);
+
+    const wrong = await app.inject({
+      method: "GET",
+      url: "/shop/info?shop_id=11",
+      headers: { "x-shop-info-token": "ffffffffffffffff" },
+    });
+    expect(wrong.statusCode).toBe(401);
+
+    const allowed = await app.inject({
+      method: "GET",
+      url: "/shop/info?shop_id=11",
+      headers: { "x-shop-info-token": "0123456789abcdef" },
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toMatchObject({ shop_name: "Sandbox Shop" });
+  });
+
+  it("stays open when no secret is configured", async () => {
+    const { app, tokens } = server({}, fake());
+    await tokens.set({ shopId: 11, accessToken: "a", refreshToken: "r", expiresAt: Date.now() + 3_600_000 });
+
+    const response = await app.inject({ method: "GET", url: "/shop/info?shop_id=11" });
+    expect(response.statusCode).toBe(200);
+  });
+});
+
 describe("POST /webhook/shopee", () => {
   const body = '{"code":3,"shop_id":11,"data":{"ordersn":"241112ABC"}}';
 

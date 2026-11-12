@@ -25,6 +25,8 @@ const envSchema = z.object({
   SHOPEE_BASE_URL: z.string().url().optional(),
   /** Key the console uses to sign test pushes from the Push Mechanism page. */
   PUSH_TEST_PARTNER_KEY: z.string().min(1).optional(),
+  /** Shared secret that /shop/info requires once the service is public. */
+  SHOP_INFO_TOKEN: z.string().min(16).optional(),
 });
 
 export interface Config {
@@ -37,6 +39,7 @@ export interface Config {
   port: number;
   tokenStorePath?: string;
   pushTestPartnerKey?: string;
+  shopInfoToken?: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -52,5 +55,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (parsed.PUBLIC_URL) config.publicUrl = parsed.PUBLIC_URL;
   if (parsed.TOKEN_STORE_PATH) config.tokenStorePath = parsed.TOKEN_STORE_PATH;
   if (parsed.PUSH_TEST_PARTNER_KEY) config.pushTestPartnerKey = parsed.PUSH_TEST_PARTNER_KEY;
+  if (parsed.SHOP_INFO_TOKEN) config.shopInfoToken = parsed.SHOP_INFO_TOKEN;
   return config;
 }

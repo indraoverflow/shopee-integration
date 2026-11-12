@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
 import { authorizationUrl, exchangeCode, refreshAccessToken } from "./auth.js";
 import { ShopeeApiError, ShopeeClient } from "./client.js";
@@ -10,6 +11,18 @@ export interface ServerOptions {
   config?: Config;
   client?: ShopeeClient;
   tokens?: TokenStore;
+}
+
+/**
+ * Compares two secrets by digest, so the comparison neither leaks the length
+ * nor short-circuits on the first differing byte.
+ */
+function secretMatches(expected: string, received: string | string[] | undefined): boolean {
+  const value = Array.isArray(received) ? received[0] : received;
+  if (!value) return false;
+  const a = createHash("sha256").update(expected).digest();
+  const b = createHash("sha256").update(value).digest();
+  return timingSafeEqual(a, b);
 }
 
 export interface BuiltServer {
@@ -92,6 +105,12 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
     const shopId = Number(request.query.shop_id);
     if (!Number.isInteger(shopId) || shopId <= 0) {
       return reply.code(400).send({ error: "shop_id is required" });
+    }
+
+    // The tunnel makes this endpoint public, so a shared secret keeps shop data
+    // from being readable by anyone who guesses a shop id.
+    if (config.shopInfoToken && !secretMatches(config.shopInfoToken, request.headers["x-shop-info-token"])) {
+      return reply.code(401).send({ error: "missing or wrong x-shop-info-token" });
     }
 
     let stored = await tokens.get(shopId);

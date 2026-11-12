@@ -204,6 +204,16 @@ new pair before calling the API, so a restart does not cost the seller another a
 curl "http://localhost:3000/shop/info?shop_id=14701711"
 ```
 
+Behind a public tunnel, set `SHOP_INFO_TOKEN` and send it as a header, otherwise the shop name is
+readable by anyone who guesses a shop id:
+
+```bash
+curl -H "x-shop-info-token: $SHOP_INFO_TOKEN" "https://your-domain/shop/info?shop_id=14701711"
+```
+
+`/auth/callback` and `/webhook/shopee` stay public on purpose: Shopee calls them, and one is
+protected by a single-use code while the other is protected by the Push signature.
+
 That returns `shop_id`, `shop_name`, `region`, `status` and the token expiry, and it never echoes
 the tokens themselves. `getShopInfo()` is the library call behind it, and it is the smallest proof
 that an authorization works before you build anything on top.
