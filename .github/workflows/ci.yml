@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: typecheck
+        run: npm run typecheck
+      - name: test
+        run: npm test
+      - name: build
+        run: npm run build
+      - name: the built server starts and answers /health
+        run: |
+          PARTNER_ID=1 PARTNER_KEY=test PORT=3111 node dist/server.js &
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3111/health > /dev/null; then
+              curl -fsS http://127.0.0.1:3111/health
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "server did not answer /health"
+          exit 1
