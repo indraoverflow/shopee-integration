@@ -51,7 +51,7 @@ The test suite needs no credentials: it runs against the documented fixture and 
 
 | Environment | Host |
 |---|---|
-| Sandbox | `https://partner.test-stable.shopeemobile.com` |
+| Sandbox | `https://openplatform.sandbox.test-stable.shopee.sg` |
 | Production | `https://partner.shopeemobile.com` |
 
 The partner id, the key and the host belong to the same environment. A production key against

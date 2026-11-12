@@ -1,7 +1,12 @@
 import { z } from "zod";
 
+/**
+ * The sandbox host is not the one most guides print. Read "Request URL" in the
+ * console's API Test Tool for the app you are working on and override with
+ * SHOPEE_BASE_URL if your region differs.
+ */
 export const HOSTS = {
-  sandbox: "https://partner.test-stable.shopeemobile.com",
+  sandbox: "https://openplatform.sandbox.test-stable.shopee.sg",
   production: "https://partner.shopeemobile.com",
 } as const;
 
@@ -16,6 +21,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().max(65535).default(3000),
   /** Where access tokens are persisted. Unset keeps them in memory only. */
   TOKEN_STORE_PATH: z.string().min(1).optional(),
+  /** Full override for the API host, for regions whose host differs. */
+  SHOPEE_BASE_URL: z.string().url().optional(),
 });
 
 export interface Config {
@@ -35,7 +42,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     partnerId: parsed.PARTNER_ID,
     partnerKey: parsed.PARTNER_KEY,
     env: parsed.SHOPEE_ENV,
-    baseUrl: HOSTS[parsed.SHOPEE_ENV],
+    baseUrl: parsed.SHOPEE_BASE_URL ?? HOSTS[parsed.SHOPEE_ENV],
     port: parsed.PORT,
   };
   if (parsed.REDIRECT_URL) config.redirectUrl = parsed.REDIRECT_URL;
