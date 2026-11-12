@@ -1,7 +1,13 @@
 node_modules/
 dist/
+
+# Secrets. Never commit these.
 .env
 .env.*
 !.env.example
+
+# Token store: access and refresh tokens for every authorized shop.
+data/
+
 coverage/
 *.log

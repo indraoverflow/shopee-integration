@@ -29,6 +29,13 @@ jobs:
       - run: npm ci
       - name: typecheck
         run: npm run typecheck
+      - name: secrets stay out of the repository
+        # A committed token store is worse than a leaked key: it holds a live
+        # refresh token per shop. Fail here rather than after the push.
+        run: |
+          git check-ignore -q .env || { echo ".env is not ignored"; exit 1; }
+          git check-ignore -q data/tokens.json || { echo "data/ is not ignored"; exit 1; }
+          echo "ignore rules cover .env and data/"
       - name: test
         run: npm test
       - name: build
