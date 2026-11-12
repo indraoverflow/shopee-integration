@@ -1,4 +1,4 @@
-import type { ShopeeClient } from "./client.js";
+import type { ShopeeSDK } from "@congminh1254/shopee-sdk";
 import { listOrdersByUpdateTime, type OrderPage, type OrderSummary, type OrderWindow } from "./shop.js";
 import type { PushEvent } from "./webhook.js";
 
@@ -27,12 +27,12 @@ export interface ReconcileResult {
  * order harmless.
  */
 export async function reconcileOrders(
-  client: ShopeeClient,
+  sdk: ShopeeSDK,
   window: OrderWindow,
   handle: (order: OrderSummary) => Promise<void> | void,
   seen: Set<string> = new Set(),
 ): Promise<ReconcileResult> {
-  const page: OrderPage = await listOrdersByUpdateTime(client, window);
+  const page: OrderPage = await listOrdersByUpdateTime(sdk, window);
   let handled = 0;
   let skipped = 0;
 

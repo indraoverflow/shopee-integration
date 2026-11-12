@@ -1,4 +1,14 @@
-import type { ShopeeClient } from "./client.js";
+import type { ShopeeSDK } from "@congminh1254/shopee-sdk";
+
+/**
+ * The sandbox answers flat for some endpoints, with the payload at the top
+ * level, while the upstream types declare `response` as always present. Accept
+ * both so a flat body is not read as an empty result.
+ */
+export function unwrap<T>(body: unknown): T {
+  const envelope = body as { response?: T } & T;
+  return (envelope.response ?? envelope) as T;
+}
 
 export interface ShopInfo {
   shop_id?: number;
@@ -16,19 +26,11 @@ export interface OrderSummary {
   [key: string]: unknown;
 }
 
-export const SHOP_INFO_PATH = "/api/v2/shop/get_shop_info";
-export const ORDER_LIST_PATH = "/api/v2/order/get_order_list";
-
-export interface ShopAuth {
-  accessToken: string;
-  shopId: number;
+export async function getShopInfo(sdk: ShopeeSDK): Promise<ShopInfo> {
+  return unwrap<ShopInfo>(await sdk.shop.getShopInfo());
 }
 
-export async function getShopInfo(client: ShopeeClient, auth: ShopAuth): Promise<ShopInfo> {
-  return client.shopGet<ShopInfo>(SHOP_INFO_PATH, auth);
-}
-
-export interface OrderWindow extends ShopAuth {
+export interface OrderWindow {
   /** Unix seconds. */
   from: number;
   /** Unix seconds. */
@@ -50,7 +52,7 @@ export interface OrderPage {
  * update time, not create time: a push that never arrived is invisible in a
  * create-time query.
  */
-export async function listOrdersByUpdateTime(client: ShopeeClient, window: OrderWindow): Promise<OrderPage> {
+export async function listOrdersByUpdateTime(sdk: ShopeeSDK, window: OrderWindow): Promise<OrderPage> {
   const pageSize = window.pageSize ?? 50;
   const maxPages = window.maxPages ?? 20;
   const orders: OrderSummary[] = [];
@@ -58,32 +60,23 @@ export async function listOrdersByUpdateTime(client: ShopeeClient, window: Order
   let pages = 0;
 
   for (;;) {
-    const response = await client.shopGet<{
-      order_list?: OrderSummary[];
-      more?: boolean;
-      next_cursor?: string;
-    }>(
-      ORDER_LIST_PATH,
-      { accessToken: window.accessToken, shopId: window.shopId },
-      {
+    const page = unwrap<{ order_list?: OrderSummary[]; more?: boolean; next_cursor?: string }>(
+      await sdk.order.getOrderList({
         time_range_field: "update_time",
         time_from: window.from,
         time_to: window.to,
         page_size: pageSize,
         ...(cursor ? { cursor } : {}),
-      },
+      } as never),
     );
 
     pages += 1;
-    orders.push(...(response.order_list ?? []));
+    orders.push(...(page.order_list ?? []));
 
-    if (!response.more) {
+    if (!page.more || !page.next_cursor) {
       return { orders, pages, truncated: false };
     }
-    if (!response.next_cursor) {
-      return { orders, pages, truncated: false };
-    }
-    cursor = response.next_cursor;
+    cursor = page.next_cursor;
     if (pages >= maxPages) {
       return { orders, pages, truncated: true };
     }

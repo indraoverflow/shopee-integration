@@ -24,6 +24,7 @@
     "exchange": "node --env-file-if-exists=.env dist/exchange.js"
   },
   "dependencies": {
+    "@congminh1254/shopee-sdk": "^2.14.1",
     "fastify": "^5.2.0",
     "zod": "^3.24.1"
   },

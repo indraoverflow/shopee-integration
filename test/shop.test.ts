@@ -1,22 +1,24 @@
 import { describe, expect, it } from "vitest";
-import type { ShopeeClient } from "../src/client.js";
-import { ORDER_LIST_PATH, SHOP_INFO_PATH, getShopInfo, listOrdersByUpdateTime } from "../src/shop.js";
-
-const auth = { accessToken: "tok", shopId: 11 };
+import type { ShopeeSDK } from "@congminh1254/shopee-sdk";
+import { getShopInfo, listOrdersByUpdateTime } from "../src/shop.js";
 
 describe("getShopInfo", () => {
-  it("calls the shop endpoint with the shop credentials", async () => {
-    const calls: unknown[] = [];
-    const fake = {
-      shopGet: async (path: string, shop: unknown, query: unknown) => {
-        calls.push({ path, shop, query });
-        return { shop_id: 11, shop_name: "Test Shop", region: "ID" };
-      },
-    } as unknown as ShopeeClient;
+  it("returns the payload when the endpoint wraps it", async () => {
+    const sdk = {
+      shop: { getShopInfo: async () => ({ response: { shop_id: 11, shop_name: "Wrapped Shop", region: "ID" }, error: "" }) },
+    } as unknown as ShopeeSDK;
 
-    const info = await getShopInfo(fake, auth);
-    expect(info.shop_name).toBe("Test Shop");
-    expect(calls[0]).toEqual({ path: SHOP_INFO_PATH, shop: auth, query: undefined });
+    const info = await getShopInfo(sdk);
+    expect(info.shop_name).toBe("Wrapped Shop");
+  });
+
+  it("returns the payload when the endpoint answers flat, as the sandbox does", async () => {
+    const sdk = {
+      shop: { getShopInfo: async () => ({ shop_id: 11, shop_name: "Flat Shop", region: "ID", error: "", message: "" }) },
+    } as unknown as ShopeeSDK;
+
+    const info = await getShopInfo(sdk);
+    expect(info.shop_name).toBe("Flat Shop");
   });
 });
 
@@ -27,14 +29,16 @@ describe("listOrdersByUpdateTime", () => {
       { order_list: [{ order_sn: "A" }, { order_sn: "B" }], more: true, next_cursor: "c1" },
       { order_list: [{ order_sn: "C" }], more: false },
     ];
-    const fake = {
-      shopGet: async (_path: string, _shop: unknown, query: Record<string, unknown>) => {
-        queries.push(query);
-        return pages[queries.length - 1];
+    const sdk = {
+      order: {
+        getOrderList: async (query: Record<string, unknown>) => {
+          queries.push(query);
+          return pages[queries.length - 1];
+        },
       },
-    } as unknown as ShopeeClient;
+    } as unknown as ShopeeSDK;
 
-    const result = await listOrdersByUpdateTime(fake, { ...auth, from: 100, to: 200 });
+    const result = await listOrdersByUpdateTime(sdk, { from: 100, to: 200 });
 
     expect(result.orders.map((o) => o.order_sn)).toEqual(["A", "B", "C"]);
     expect(result.pages).toBe(2);
@@ -44,37 +48,33 @@ describe("listOrdersByUpdateTime", () => {
     expect(queries[1]!.cursor).toBe("c1");
   });
 
-  it("stops at maxPages and says the result is truncated", async () => {
-    const fake = {
-      shopGet: async () => ({ order_list: [{ order_sn: "A" }], more: true, next_cursor: "again" }),
-    } as unknown as ShopeeClient;
+  it("unwraps a wrapped order list", async () => {
+    const sdk = {
+      order: { getOrderList: async () => ({ response: { order_list: [{ order_sn: "W" }], more: false }, error: "" }) },
+    } as unknown as ShopeeSDK;
 
-    const result = await listOrdersByUpdateTime(fake, { ...auth, from: 1, to: 2, pageSize: 1, maxPages: 3 });
+    const result = await listOrdersByUpdateTime(sdk, { from: 1, to: 2 });
+    expect(result.orders.map((o) => o.order_sn)).toEqual(["W"]);
+  });
+
+  it("stops at maxPages and says the result is truncated", async () => {
+    const sdk = {
+      order: { getOrderList: async () => ({ order_list: [{ order_sn: "A" }], more: true, next_cursor: "again" }) },
+    } as unknown as ShopeeSDK;
+
+    const result = await listOrdersByUpdateTime(sdk, { from: 1, to: 2, pageSize: 1, maxPages: 3 });
     expect(result.pages).toBe(3);
     expect(result.truncated).toBe(true);
     expect(result.orders).toHaveLength(3);
   });
 
   it("stops when more is true but no cursor came back, instead of looping", async () => {
-    const fake = {
-      shopGet: async () => ({ order_list: [{ order_sn: "A" }], more: true }),
-    } as unknown as ShopeeClient;
+    const sdk = {
+      order: { getOrderList: async () => ({ order_list: [{ order_sn: "A" }], more: true }) },
+    } as unknown as ShopeeSDK;
 
-    const result = await listOrdersByUpdateTime(fake, { ...auth, from: 1, to: 2 });
+    const result = await listOrdersByUpdateTime(sdk, { from: 1, to: 2 });
     expect(result.pages).toBe(1);
     expect(result.truncated).toBe(false);
-  });
-
-  it("asks for the order list path", async () => {
-    const paths: string[] = [];
-    const fake = {
-      shopGet: async (path: string) => {
-        paths.push(path);
-        return { order_list: [], more: false };
-      },
-    } as unknown as ShopeeClient;
-
-    await listOrdersByUpdateTime(fake, { ...auth, from: 1, to: 2 });
-    expect(paths).toEqual([ORDER_LIST_PATH]);
   });
 });

@@ -1,14 +1,16 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { authorizationUrl, exchangeCode, refreshAccessToken } from "./auth.js";
-import { ShopeeApiError, ShopeeClient } from "./client.js";
+import { ShopeeApiError, type ShopeeSDK } from "@congminh1254/shopee-sdk";
+import { authorizationUrl } from "./auth.js";
 import { loadConfig, type Config } from "./config.js";
+import { createSdk } from "./sdk.js";
 import { getShopInfo, type ShopInfo } from "./shop.js";
-import { FileTokenStore, MemoryTokenStore, isExpired, toStoredToken, type TokenStore } from "./tokens.js";
+import { FileTokenStore, MemoryTokenStore, type TokenStore } from "./tokens.js";
 import { parsePushEvent, verifyPushSignature } from "./webhook.js";
 
 export interface ServerOptions {
   config?: Config;
-  client?: ShopeeClient;
+  /** Override for tests: one SDK instance per shop id. */
+  sdkFor?: (shopId: number) => ShopeeSDK;
   tokens?: TokenStore;
 }
 
@@ -28,11 +30,7 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
   const tokens: TokenStore =
     options.tokens ??
     (config.tokenStorePath ? new FileTokenStore(config.tokenStorePath) : new MemoryTokenStore());
-  const client = options.client ?? new ShopeeClient({
-    partnerId: config.partnerId,
-    partnerKey: config.partnerKey,
-    baseUrl: config.baseUrl,
-  });
+  const sdkFor = options.sdkFor ?? ((shopId: number) => createSdk(config, tokens, shopId));
 
   const app = Fastify({ logger: false, bodyLimit: 1_048_576 });
 
@@ -68,8 +66,12 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
         return reply.code(400).send({ error: "code and shop_id are required" });
       }
       try {
-        const token = await exchangeCode(client, config.partnerId, { code, shopId });
-        await tokens.set(toStoredToken(shopId, token));
+        // authenticateWithCode stores the token through our TokenStorage bridge,
+        // so the exchange and the persistence cannot drift apart.
+        const token = await sdkFor(shopId).authenticateWithCode(code, shopId);
+        if (!token) {
+          throw new Error("the token exchange returned nothing");
+        }
         // Never echo the tokens: report what the caller needs to know instead.
         return { shop_id: shopId, expires_in: token.expire_in };
       } catch (error) {
@@ -100,22 +102,16 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
     }
 
     try {
-      if (isExpired(stored)) {
-        const refreshed = await refreshAccessToken(client, config.partnerId, {
-          refreshToken: stored.refreshToken,
-          shopId,
-        });
-        stored = toStoredToken(shopId, refreshed);
-        await tokens.set(stored);
-      }
-
-      const info: ShopInfo = await getShopInfo(client, { accessToken: stored.accessToken, shopId });
+      // The SDK refreshes by itself when the stored token has expired, and the
+      // new pair lands in our store through the same bridge.
+      const info: ShopInfo = await getShopInfo(sdkFor(shopId));
+      const current = (await tokens.get(shopId)) ?? stored;
       return {
         shop_id: info.shop_id ?? shopId,
         shop_name: info.shop_name,
         region: info.region,
         status: info.status,
-        expires_at: new Date(stored.expiresAt).toISOString(),
+        expires_at: new Date(current.expiresAt).toISOString(),
       };
     } catch (error) {
       // Same reasoning as the callback: keep upstream rejections in the 4xx

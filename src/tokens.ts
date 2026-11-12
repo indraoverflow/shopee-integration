@@ -1,6 +1,6 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { AccessToken } from "./auth.js";
+import type { AccessToken } from "@congminh1254/shopee-sdk";
 
 /**
  * What is worth persisting from a token exchange. `expiresAt` is absolute

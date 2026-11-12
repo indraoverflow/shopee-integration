@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { exchangeCode } from "./auth.js";
-import { ShopeeClient, ShopeeApiError } from "./client.js";
+import { ShopeeApiError } from "@congminh1254/shopee-sdk";
 import { loadConfig } from "./config.js";
-import { FileTokenStore, MemoryTokenStore, toStoredToken } from "./tokens.js";
+import { createSdk } from "./sdk.js";
+import { FileTokenStore, MemoryTokenStore } from "./tokens.js";
 
 /**
  * Exchanges an authorization code for a token and stores it.
@@ -27,23 +27,18 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  const client = new ShopeeClient({
-    partnerId: config.partnerId,
-    partnerKey: config.partnerKey,
-    baseUrl: config.baseUrl,
-  });
-  const store = config.tokenStorePath ? new FileTokenStore(config.tokenStorePath) : new MemoryTokenStore();
+  const tokens = config.tokenStorePath ? new FileTokenStore(config.tokenStorePath) : new MemoryTokenStore();
 
   try {
-    const token = await exchangeCode(client, config.partnerId, { code, shopId });
-    await store.set(toStoredToken(shopId, token));
+    const token = await createSdk(config, tokens, shopId).authenticateWithCode(code, shopId);
+    if (!token) throw new Error("the token exchange returned nothing");
     console.log(`shop ${shopId}: token stored, expires in ${token.expire_in}s`);
     if (!config.tokenStorePath) {
       console.log("TOKEN_STORE_PATH is unset, so the token lived only in this process. Set it in .env.");
     }
   } catch (error) {
     if (error instanceof ShopeeApiError) {
-      console.error(`shop ${shopId}: ${error.code ?? "error"} ${error.message ?? ""}`.trim());
+      console.error(`shop ${shopId}: ${error.error ?? "error"} ${error.apiMessage ?? ""}`.trim());
       process.exit(1);
     }
     throw error;
