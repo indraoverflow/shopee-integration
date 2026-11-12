@@ -71,6 +71,22 @@ string. A signature is valid for five minutes, so it is computed per request and
 Refresh tokens are single use. Persist the new pair every time you refresh, or the next refresh
 fails with an authentication error.
 
+## Check the credentials
+
+```bash
+npm run verify
+```
+
+It prints the environment, the partner id and the signed authorization URL, then sends a token
+exchange for a deliberately invalid code. That is enough to learn whether the credentials are
+accepted, without a shop and without a real code:
+
+| Answer | Meaning |
+|---|---|
+| `error_sign` | The signature was rejected: wrong key, wrong partner id, wrong environment, or a clock more than five minutes off. |
+| `invalid_partner_id` | The server looked the partner up and did not find it. The id does not exist in this environment, so the signature was never checked. |
+| anything else, for example an invalid or expired code | The signature was accepted. The credentials belong to this environment. |
+
 ## Push (webhook)
 
 Shopee sends the signature in the `Authorization` header: HMAC-SHA256 of
