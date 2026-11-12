@@ -124,6 +124,26 @@ rm candidate-keys.txt
 
 `candidate-keys.txt` is covered by `.gitignore` together with `.env` and `data/`.
 
+### Finishing the authorization when the redirect cannot be reached
+
+Shopee only calls back to the domain registered as `Test Redirect URL Domain` in the app page. If
+that domain is not served yet, the browser still lands on the redirect URL, and the code is visible
+in the address bar:
+
+```
+https://your-domain/auth/callback?code=5a5477794a55537954697169514f4653&shop_id=227889163
+```
+
+Hand that code to the CLI, which exchanges it and writes the token store:
+
+```bash
+CODE=5a5477794a55537954697169514f4653 SHOP_ID=227889163 npm run exchange
+```
+
+It prints the shop id and the token lifetime only, never the token. A code is single use and short
+lived, so run it immediately. Then `curl "http://localhost:3111/shop/info?shop_id=227889163"`
+proves the token works.
+
 ## Push (webhook)
 
 Shopee sends the signature in the `Authorization` header: HMAC-SHA256 of

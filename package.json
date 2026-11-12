@@ -20,7 +20,8 @@
     "start": "node --env-file-if-exists=.env dist/server.js",
     "auth-url": "node --env-file-if-exists=.env dist/cli.js",
     "verify": "node --env-file-if-exists=.env dist/verify.js",
-    "diagnose": "node --env-file-if-exists=.env dist/diagnose.js"
+    "diagnose": "node --env-file-if-exists=.env dist/diagnose.js",
+    "exchange": "node --env-file-if-exists=.env dist/exchange.js"
   },
   "dependencies": {
     "fastify": "^5.2.0",
