@@ -18,10 +18,20 @@ A single `Dockerfile`-less `node dist/server.js` runs the receiver.
 
 ```bash
 npm install
-cp .env.example .env      # fill in the sandbox partner id and key
+cp .env.example .env      # repository root, next to package.json
 npm run build
 npm test
 ```
+
+`.env` lives at the repository root and is gitignored. The npm scripts load it with Node's
+`--env-file-if-exists=.env`, so there is no dotenv dependency and no code path that reads the file
+itself. In a container or CI, skip the file and pass the same names as environment variables.
+
+| Path | Tracked | Purpose |
+|---|---|---|
+| `.env.example` | yes | Every variable with a safe placeholder |
+| `.env` | no | Your real partner id and key |
+| `data/tokens.json` | no | Access and refresh tokens, mode 0600, when `TOKEN_STORE_PATH` is set |
 
 The test suite needs no credentials: it runs against the documented fixture and an injected
 `fetch`, so it can run in CI on a fork without secrets.

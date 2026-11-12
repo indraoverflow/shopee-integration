@@ -17,9 +17,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "node dist/server.js",
-    "auth-url": "node dist/cli.js",
-    "verify": "node dist/verify.js"
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "auth-url": "node --env-file-if-exists=.env dist/cli.js",
+    "verify": "node --env-file-if-exists=.env dist/verify.js"
   },
   "dependencies": {
     "fastify": "^5.2.0",
