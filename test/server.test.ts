@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ShopeeClient } from "../src/client.js";
+import { ShopeeApiError, type ShopeeClient } from "../src/client.js";
 import type { Config } from "../src/config.js";
 import { buildServer } from "../src/server.js";
 import { pushSignature } from "../src/webhook.js";
@@ -44,6 +44,21 @@ describe("GET /auth/callback", () => {
     const { app } = server();
     const response = await app.inject({ method: "GET", url: "/auth/callback" });
     expect(response.statusCode).toBe(400);
+  });
+
+  it("answers 400, not 502, when Shopee rejects the code", async () => {
+    // A gateway status here would be replaced by the proxy's own error page,
+    // which is exactly how the real message got lost behind the tunnel.
+    const fake = {
+      publicPost: async () => {
+        throw new ShopeeApiError("invalid_code", "The code is expired or used or invalid");
+      },
+    } as unknown as ShopeeClient;
+    const { app } = server({}, fake);
+
+    const response = await app.inject({ method: "GET", url: "/auth/callback?code=stale&shop_id=11" });
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain("invalid_code");
   });
 
   it("stores the token and does not echo it", async () => {

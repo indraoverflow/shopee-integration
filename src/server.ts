@@ -73,7 +73,10 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
         // Never echo the tokens: report what the caller needs to know instead.
         return { shop_id: shopId, expires_in: token.expire_in };
       } catch (error) {
-        const status = error instanceof ShopeeApiError ? 502 : 500;
+        // An expired, reused or mismatched code is the caller's problem, so it
+        // is a 400. A 5xx here would also be replaced by Cloudflare's own error
+        // page when the service sits behind a tunnel, hiding the real message.
+        const status = error instanceof ShopeeApiError ? 400 : 500;
         return reply.code(status).send({ error: error instanceof Error ? error.message : "unknown" });
       }
     },
@@ -115,7 +118,9 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
         expires_at: new Date(stored.expiresAt).toISOString(),
       };
     } catch (error) {
-      const status = error instanceof ShopeeApiError ? 502 : 500;
+      // Same reasoning as the callback: keep upstream rejections in the 4xx
+      // range so a proxy does not swap the body for its own error page.
+      const status = error instanceof ShopeeApiError ? 400 : 500;
       return reply.code(status).send({ error: error instanceof Error ? error.message : "unknown" });
     }
   });
