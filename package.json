@@ -1,5 +1,5 @@
 {
-  "name": "shopee-open-platform",
+  "name": "shopee-sdk",
   "version": "0.1.0",
   "description": "Typed client, OAuth flow and webhook receiver for the Shopee Open Platform API v2",
   "license": "MIT",

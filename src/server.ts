@@ -1,29 +1,33 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { authorizationUrl, exchangeCode, type AccessToken } from "./auth.js";
+import { authorizationUrl, exchangeCode, refreshAccessToken } from "./auth.js";
 import { ShopeeApiError, ShopeeClient } from "./client.js";
 import { loadConfig, type Config } from "./config.js";
+import { getShopInfo, type ShopInfo } from "./shop.js";
+import { FileTokenStore, MemoryTokenStore, isExpired, toStoredToken, type TokenStore } from "./tokens.js";
 import { parsePushEvent, verifyPushSignature } from "./webhook.js";
 
 export interface ServerOptions {
   config?: Config;
   client?: ShopeeClient;
-  /** Access tokens keyed by shop id. A real deployment stores these durably. */
-  tokens?: Map<number, AccessToken>;
+  tokens?: TokenStore;
 }
 
 export interface BuiltServer {
   app: FastifyInstance;
-  tokens: Map<number, AccessToken>;
+  tokens: TokenStore;
 }
 
 /**
- * The service is deliberately small: enough to complete authorization and to
- * receive pushes with a verified signature. Business handling belongs behind a
- * queue, not in the request that Shopee is waiting on.
+ * A reference service: enough to finish authorization, keep the token across
+ * restarts, call one shop endpoint, and receive pushes with a verified
+ * signature. Business handling belongs behind a queue, not inside the request
+ * Shopee is waiting on.
  */
 export function buildServer(options: ServerOptions = {}): BuiltServer {
   const config = options.config ?? loadConfig();
-  const tokens = options.tokens ?? new Map<number, AccessToken>();
+  const tokens: TokenStore =
+    options.tokens ??
+    (config.tokenStorePath ? new FileTokenStore(config.tokenStorePath) : new MemoryTokenStore());
   const client = options.client ?? new ShopeeClient({
     partnerId: config.partnerId,
     partnerKey: config.partnerKey,
@@ -65,7 +69,7 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
       }
       try {
         const token = await exchangeCode(client, config.partnerId, { code, shopId });
-        tokens.set(shopId, token);
+        await tokens.set(toStoredToken(shopId, token));
         // Never echo the tokens: report what the caller needs to know instead.
         return { shop_id: shopId, expires_in: token.expire_in };
       } catch (error) {
@@ -74,6 +78,47 @@ export function buildServer(options: ServerOptions = {}): BuiltServer {
       }
     },
   );
+
+  /**
+   * Calls one shop endpoint, the smallest proof that a stored token works. An
+   * expired token is refreshed once and the new pair persisted, because refresh
+   * tokens are single use and losing one means asking the seller to authorize
+   * again.
+   */
+  app.get<{ Querystring: { shop_id?: string } }>("/shop/info", async (request, reply) => {
+    const shopId = Number(request.query.shop_id);
+    if (!Number.isInteger(shopId) || shopId <= 0) {
+      return reply.code(400).send({ error: "shop_id is required" });
+    }
+
+    let stored = await tokens.get(shopId);
+    if (!stored) {
+      return reply.code(404).send({ error: `no token for shop ${shopId}; authorize the app first` });
+    }
+
+    try {
+      if (isExpired(stored)) {
+        const refreshed = await refreshAccessToken(client, config.partnerId, {
+          refreshToken: stored.refreshToken,
+          shopId,
+        });
+        stored = toStoredToken(shopId, refreshed);
+        await tokens.set(stored);
+      }
+
+      const info: ShopInfo = await getShopInfo(client, { accessToken: stored.accessToken, shopId });
+      return {
+        shop_id: info.shop_id ?? shopId,
+        shop_name: info.shop_name,
+        region: info.region,
+        status: info.status,
+        expires_at: new Date(stored.expiresAt).toISOString(),
+      };
+    } catch (error) {
+      const status = error instanceof ShopeeApiError ? 502 : 500;
+      return reply.code(status).send({ error: error instanceof Error ? error.message : "unknown" });
+    }
+  });
 
   app.post<{ Body: string }>("/webhook/shopee", async (request, reply) => {
     const rawBody = typeof request.body === "string" ? request.body : JSON.stringify(request.body);

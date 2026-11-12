@@ -1,4 +1,4 @@
-# shopee-open-platform
+# shopee-sdk
 
 A typed Node.js client, OAuth flow and Push receiver for the **Shopee Open Platform API v2**:
 correct signing for the three API kinds, an authorization helper, token exchange and refresh,
@@ -102,13 +102,60 @@ check out. Work belongs behind a queue: pushes can arrive late, twice, or not at
 handler should be idempotent on the order or item id and a reconciliation job should query by
 update time.
 
+## Token storage
+
+Set `TOKEN_STORE_PATH` to persist tokens; leave it unset and they live in memory, which loses
+every authorization on restart.
+
+```bash
+TOKEN_STORE_PATH=./data/tokens.json
+```
+
+`FileTokenStore` keeps one JSON object, writes through a temporary file and renames it, and
+creates the file with mode `0600`. The file holds access and refresh tokens for every shop, so
+treat it like the partner key. The interface is three methods (`get`, `set`, `delete`), which is
+small enough to swap for your database in an afternoon.
+
+Refresh tokens are single use. `GET /shop/info` refreshes an expired token once and persists the
+new pair before calling the API, so a restart does not cost the seller another authorization.
+
+## Calling a shop endpoint
+
+```bash
+curl "http://localhost:3000/shop/info?shop_id=14701711"
+```
+
+That returns `shop_id`, `shop_name`, `region`, `status` and the token expiry, and it never echoes
+the tokens themselves. `getShopInfo()` is the library call behind it, and it is the smallest proof
+that an authorization works before you build anything on top.
+
+## Push plus reconciliation
+
+A webhook alone is not a feed. Pushes arrive late, twice, or not at all, so the package ships the
+other half:
+
+```ts
+import { reconcileOrders } from "shopee-sdk";
+
+const seen = new Set<string>();
+const result = await reconcileOrders(client, { ...auth, from, to: Math.floor(Date.now() / 1000) }, async (order) => {
+  await upsertOrder(order);           // idempotent on order_sn
+}, seen);
+```
+
+`reconcileOrders` queries orders by **update_time**, pages with the cursor until `more` is false,
+and skips anything already in `seen`, so a repeated push and a reconciliation pass cannot
+double-handle one order. `orderSnFromPush(event)` reads the order number out of a status push when
+you want the push path to share the same handler.
+
 ## What this is not
 
-- Token storage is an in-memory `Map` keyed by shop id. Replace it with your database before
-  running more than one process.
+- No database of its own. `FileTokenStore` is a single-process store; point `TokenStore` at your
+  database before running more than one instance.
 - No retry or rate limiting. Add it at the call site, per endpoint, because Shopee limits differ
   by API.
-- No product or order domain code. This is the transport, the signing and the authentication.
+- No product or order domain code beyond reading a shop and listing order summaries. This is the
+  transport, the signing, the authentication and the reconciliation primitive.
 
 ## Layout
 
@@ -116,8 +163,12 @@ update time.
 src/signature.ts  base string and HMAC for the three API kinds
 src/client.ts     signed fetch, envelope and error handling
 src/auth.ts       authorization URL, code exchange, refresh
+src/shop.ts       get_shop_info and order list by update time
+src/sync.ts       push plus reconciliation, idempotent on order_sn
+src/tokens.ts     TokenStore interface, memory and file implementations
 src/webhook.ts    push signature and payload parsing
-src/server.ts     Fastify app: /health, /auth/url, /auth/callback, /webhook/shopee
+src/server.ts     Fastify app: /health, /auth/url, /auth/callback, /shop/info, /webhook/shopee
+src/verify.ts     credential probe that needs no shop
 test/             fixture-driven tests, no credentials required
 ```
 

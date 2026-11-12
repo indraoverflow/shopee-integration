@@ -56,7 +56,8 @@ describe("GET /auth/callback", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ shop_id: 11, expires_in: 14400 });
     expect(response.body).not.toContain("secret-access");
-    expect(tokens.get(11)?.access_token).toBe("secret-access");
+    const stored = await tokens.get(11);
+    expect(stored?.accessToken).toBe("secret-access");
   });
 });
 
