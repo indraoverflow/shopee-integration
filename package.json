@@ -1,6 +1,6 @@
 {
   "name": "shopee-integration",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Typed client, OAuth flow and webhook receiver for the Shopee Open Platform API v2",
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "fastify": "^5.2.0",
-    "zod": "^4.6.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
