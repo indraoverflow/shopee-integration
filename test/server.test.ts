@@ -14,13 +14,21 @@ const config: Config = {
   port: 3000,
 };
 
-function server(overrides: Partial<Config> = {}, client?: ShopeeClient) {
-  return buildServer({ config: { ...config, ...overrides }, ...(client ? { client } : {}) });
+async function server(overrides: Partial<Config> = {}, client?: ShopeeClient) {
+  return buildServer({
+    config: { ...config, ...overrides },
+    ...(client ? { client } : {}),
+  });
+}
+
+/** A server with a limit small enough to hit inside a test. */
+async function limitedServer(max: number) {
+  return buildServer({ config, rateLimitMax: max });
 }
 
 describe("GET /health", () => {
   it("reports the configured environment", async () => {
-    const { app } = server();
+    const { app } = await server();
     const response = await app.inject({ method: "GET", url: "/health" });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ ok: true, environment: "sandbox" });
@@ -29,19 +37,48 @@ describe("GET /health", () => {
 
 describe("GET /auth/url", () => {
   it("returns a signed authorization url and never the partner key", async () => {
-    const { app } = server();
+    const { app } = await server();
     const response = await app.inject({ method: "GET", url: "/auth/url" });
     expect(response.statusCode).toBe(200);
     const { url } = response.json() as { url: string };
-    expect(url).toContain("partner.test-stable.shopeemobile.com/api/v2/shop/auth_partner");
+    expect(url).toContain(
+      "partner.test-stable.shopeemobile.com/api/v2/shop/auth_partner",
+    );
     expect(url).toContain("partner_id=2001887");
     expect(url).not.toContain("partner-key");
   });
 });
 
+describe("rate limiting", () => {
+  it("answers 429 once a caller passes the limit", async () => {
+    const { app } = await limitedServer(2);
+    await app.ready();
+
+    const first = await app.inject({ method: "GET", url: "/health" });
+    const second = await app.inject({ method: "GET", url: "/health" });
+    const third = await app.inject({ method: "GET", url: "/health" });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(third.statusCode).toBe(429);
+  });
+
+  it("keeps the OAuth routes on a tighter budget than the webhook", async () => {
+    const { app } = await limitedServer(50);
+    await app.ready();
+
+    // 31 requests pass the per-route budget of /auth/url long before the global one.
+    let last = 200;
+    for (let attempt = 0; attempt < 31; attempt += 1) {
+      last = (await app.inject({ method: "GET", url: "/auth/url" })).statusCode;
+    }
+    expect(last).toBe(429);
+  });
+});
+
 describe("GET /auth/callback", () => {
   it("rejects a callback without code or shop id", async () => {
-    const { app } = server();
+    const { app } = await server();
     const response = await app.inject({ method: "GET", url: "/auth/callback" });
     expect(response.statusCode).toBe(400);
   });
@@ -51,23 +88,36 @@ describe("GET /auth/callback", () => {
     // which is exactly how the real message got lost behind the tunnel.
     const fake = {
       publicPostFlat: async () => {
-        throw new ShopeeApiError("invalid_code", "The code is expired or used or invalid");
+        throw new ShopeeApiError(
+          "invalid_code",
+          "The code is expired or used or invalid",
+        );
       },
     } as unknown as ShopeeClient;
-    const { app } = server({}, fake);
+    const { app } = await server({}, fake);
 
-    const response = await app.inject({ method: "GET", url: "/auth/callback?code=stale&shop_id=11" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=stale&shop_id=11",
+    });
     expect(response.statusCode).toBe(400);
     expect(response.body).toContain("invalid_code");
   });
 
   it("stores the token and does not echo it", async () => {
     const fake = {
-      publicPostFlat: async () => ({ access_token: "secret-access", refresh_token: "secret-refresh", expire_in: 14400 }),
+      publicPostFlat: async () => ({
+        access_token: "secret-access",
+        refresh_token: "secret-refresh",
+        expire_in: 14400,
+      }),
     } as unknown as ShopeeClient;
-    const { app, tokens } = server({}, fake);
+    const { app, tokens } = await server({}, fake);
 
-    const response = await app.inject({ method: "GET", url: "/auth/callback?code=abc&shop_id=11" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=abc&shop_id=11",
+    });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ shop_id: 11, expires_in: 14400 });
     expect(response.body).not.toContain("secret-access");
@@ -78,13 +128,31 @@ describe("GET /auth/callback", () => {
 
 describe("GET /shop/info guard", () => {
   const fake = () =>
-    ({ shopGet: async () => ({ shop_id: 11, shop_name: "Sandbox Shop", region: "ID", status: "NORMAL" }) }) as unknown as ShopeeClient;
+    ({
+      shopGet: async () => ({
+        shop_id: 11,
+        shop_name: "Sandbox Shop",
+        region: "ID",
+        status: "NORMAL",
+      }),
+    }) as unknown as ShopeeClient;
 
   it("refuses a request without the shared secret once one is configured", async () => {
-    const { app, tokens } = server({ shopInfoToken: "0123456789abcdef" }, fake());
-    await tokens.set({ shopId: 11, accessToken: "a", refreshToken: "r", expiresAt: Date.now() + 3_600_000 });
+    const { app, tokens } = await server(
+      { shopInfoToken: "0123456789abcdef" },
+      fake(),
+    );
+    await tokens.set({
+      shopId: 11,
+      accessToken: "a",
+      refreshToken: "r",
+      expiresAt: Date.now() + 3_600_000,
+    });
 
-    const anonymous = await app.inject({ method: "GET", url: "/shop/info?shop_id=11" });
+    const anonymous = await app.inject({
+      method: "GET",
+      url: "/shop/info?shop_id=11",
+    });
     expect(anonymous.statusCode).toBe(401);
 
     const wrong = await app.inject({
@@ -104,10 +172,18 @@ describe("GET /shop/info guard", () => {
   });
 
   it("stays open when no secret is configured", async () => {
-    const { app, tokens } = server({}, fake());
-    await tokens.set({ shopId: 11, accessToken: "a", refreshToken: "r", expiresAt: Date.now() + 3_600_000 });
+    const { app, tokens } = await server({}, fake());
+    await tokens.set({
+      shopId: 11,
+      accessToken: "a",
+      refreshToken: "r",
+      expiresAt: Date.now() + 3_600_000,
+    });
 
-    const response = await app.inject({ method: "GET", url: "/shop/info?shop_id=11" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/shop/info?shop_id=11",
+    });
     expect(response.statusCode).toBe(200);
   });
 });
@@ -116,13 +192,17 @@ describe("POST /webhook/shopee", () => {
   const body = '{"code":3,"shop_id":11,"data":{"ordersn":"241112ABC"}}';
 
   it("accepts a correctly signed push", async () => {
-    const { app } = server();
+    const { app } = await server();
     const response = await app.inject({
       method: "POST",
       url: "/webhook/shopee",
       headers: {
         "content-type": "application/json",
-        authorization: pushSignature(config.partnerKey, config.publicUrl!, body),
+        authorization: pushSignature(
+          config.partnerKey,
+          config.publicUrl!,
+          body,
+        ),
       },
       payload: body,
     });
@@ -131,14 +211,22 @@ describe("POST /webhook/shopee", () => {
   });
 
   it("rejects an unsigned or wrongly signed push", async () => {
-    const { app } = server();
-    const unsigned = await app.inject({ method: "POST", url: "/webhook/shopee", headers: { "content-type": "application/json" }, payload: body });
+    const { app } = await server();
+    const unsigned = await app.inject({
+      method: "POST",
+      url: "/webhook/shopee",
+      headers: { "content-type": "application/json" },
+      payload: body,
+    });
     expect(unsigned.statusCode).toBe(401);
 
     const wrong = await app.inject({
       method: "POST",
       url: "/webhook/shopee",
-      headers: { "content-type": "application/json", authorization: "0".repeat(64) },
+      headers: {
+        "content-type": "application/json",
+        authorization: "0".repeat(64),
+      },
       payload: body,
     });
     expect(wrong.statusCode).toBe(401);
